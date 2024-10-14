@@ -5,7 +5,6 @@ use image::GenericImageView;
 use rand::Rng;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, WindowEvent};
-use winit::platform::x11::{WindowAttributesExtX11, WindowType};
 use winit::window::WindowId;
 use winit::{
     dpi::PhysicalSize,
@@ -15,6 +14,9 @@ use winit::{
 
 #[cfg(target_os = "windows")]
 use winit::platform::windows::WindowAttributesExtWindows;
+
+#[cfg(target_os = "linux")]
+use winit::platform::x11::{WindowAttributesExtX11, WindowType};
 
 use crate::fill;
 use crate::native_utils::get_cursor_position;

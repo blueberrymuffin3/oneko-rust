@@ -5,6 +5,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+opt-level = "s"
+lto = true
+
 [dependencies]
 image = { version = "0.25.2", default-features = false, features = ["gif"] }
 rand = "0.8.5"

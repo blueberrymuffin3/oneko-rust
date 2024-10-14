@@ -23,6 +23,7 @@ mod oneko_window;
 mod sprite_sheet;
 
 fn main() -> Result<(), impl std::error::Error> {
+    #[cfg(debug_assertions)]
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::builder()

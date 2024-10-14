@@ -3,9 +3,8 @@ use std::{
     time::{self, Duration},
 };
 
-use image::{imageops::FilterType, DynamicImage, RgbaImage, SubImage};
-use rand::{seq::SliceRandom, Rng};
-use winit::window::Icon;
+use image::{imageops::FilterType, RgbaImage, SubImage};
+use rand::seq::SliceRandom;
 
 use crate::sprite_sheet::{Animation, FrameRef, SpriteSheet};
 
@@ -19,7 +18,6 @@ static SPRITE_SHEET: OnceLock<SpriteSheet> = OnceLock::new();
 pub struct Oneko {
     anim: AnimState,
     frame_count: u32,
-    idle_frames: u32,
     offset: (i32, i32),
 }
 
@@ -38,14 +36,13 @@ impl Default for Oneko {
             SpriteSheet::new(image, (32 * SCALE, 32 * SCALE))
         });
 
-        let mut rng = rand::thread_rng();
-        let offset = (rng.gen_range(-50..=50), rng.gen_range(-50..=50));
+        // let mut rng = rand::thread_rng();
+        // let offset = (rng.gen_range(-50..=50), rng.gen_range(-50..=50));
 
         Self {
             anim: AnimState::Idle(AnimStateIdle::Idle),
             frame_count: 0,
-            idle_frames: 0,
-            offset,
+            offset: (0, 0),
         }
     }
 }
@@ -53,22 +50,49 @@ impl Default for Oneko {
 impl Oneko {
     pub fn act(
         &mut self,
-        (mouse_dx, mouse_dy): (i32, i32),
-        mouse_moved: bool,
+        (cat_x, cat_y): (i32, i32),
+        (mouse_x, mouse_y): (i32, i32),
+        (monitor_width, monitor_height): (i32, i32),
     ) -> (time::Duration, (i32, i32)) {
         let (offset_x, offset_y) = self.offset;
-        let mouse_dx = mouse_dx + offset_x;
-        let mouse_dy = mouse_dy + offset_y;
+        let (cat_width, cat_height) = SPRITE_SHEET.get().unwrap().get_size();
+        let (cat_width, cat_height) = (cat_width as i32, cat_height as i32);
+        let cat_cx = cat_x + cat_width / 2;
+        let cat_cy = cat_y + cat_height / 2;
+
+        let mouse_dx = mouse_x + offset_x - cat_cx;
+        let mouse_dy = mouse_y + offset_y - cat_cy;
 
         let mouse_dxf: f64 = mouse_dx.into();
         let mouse_dyf: f64 = mouse_dy.into();
         let distance = f64::sqrt(mouse_dxf * mouse_dxf + mouse_dyf * mouse_dyf);
-        let active = distance > FOLLOW_DISTANCE;
 
-        self.idle_frames = match mouse_moved {
-            true => 0,
-            false => self.idle_frames + 1,
-        };
+        let (_, touching_wall, mut scratch_anim) = [
+            ((0, -1), AnimStateScratch::ScratchWallN),
+            ((1, 0), AnimStateScratch::ScratchWallE),
+            ((0, 1), AnimStateScratch::ScratchWallS),
+            ((-1, 0), AnimStateScratch::ScratchWallW),
+        ]
+        .into_iter()
+        .map(|((x, y), anim)| {
+            let mouse_dist = mouse_dx * x + mouse_dy * y;
+            let touching = match (x, y) {
+                (0, -1) => cat_y <= 0,
+                (1, 0) => cat_x >= monitor_width - cat_width,
+                (0, 1) => cat_y >= monitor_height - cat_height,
+                (-1, 0) => cat_x <= 0,
+                _ => unreachable!(),
+            };
+            (mouse_dist, touching, anim)
+        })
+        .max_by_key(|(mouse_dist, _, _)| *mouse_dist)
+        .unwrap();
+
+        if !touching_wall {
+            scratch_anim = AnimStateScratch::ScratchSelf;
+        }
+
+        let active = distance > FOLLOW_DISTANCE && !touching_wall;
 
         let next_moving_state: AnimState =
             AnimState::Moving(AnimStateMoving::from_vector((mouse_dx, mouse_dy)));
@@ -79,7 +103,7 @@ impl Oneko {
             // Pick something to do
             AnimState::Idle(AnimStateIdle::Idle) if self.frame_count > 10 => AnimState::Idle(
                 [
-                    AnimStateIdle::Scratch(AnimStateScratch::ScratchSelf),
+                    AnimStateIdle::Scratch(scratch_anim),
                     AnimStateIdle::Tired,
                 ]
                 .choose(&mut rand::thread_rng())
@@ -108,21 +132,24 @@ impl Oneko {
         }
 
         let animation = get_animation(self.anim);
-        let mut delta = match next_anim {
+        let (mut delta_x, mut delta_y) = match next_anim {
             AnimState::Moving(..) => (
                 (mouse_dxf / distance * SPEED) as i32,
                 (mouse_dyf / distance * SPEED) as i32,
             ),
             _ => (0, 0),
         };
-        if delta.0.abs() > mouse_dx.abs() {
-            delta.0 = mouse_dx;
+        if delta_x.abs() > mouse_dx.abs() {
+            delta_x = mouse_dx;
         }
-        if delta.1.abs() > mouse_dy.abs() {
-            delta.1 = mouse_dy;
+        if delta_y.abs() > mouse_dy.abs() {
+            delta_y = mouse_dy;
         }
 
-        return (animation.interval, delta);
+        let cat_x = (cat_x + delta_x).clamp(0, monitor_width - cat_width);
+        let cat_y = (cat_y + delta_y).clamp(0, monitor_width - cat_width);
+
+        return (animation.interval, (cat_x, cat_y));
     }
 
     pub fn click(&mut self) {

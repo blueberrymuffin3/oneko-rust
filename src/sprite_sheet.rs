@@ -31,7 +31,11 @@ impl SpriteSheet {
         return self.image.view(x, y, width, height);
     }
 
+    pub fn get_size(&self) -> (u32, u32) {
+        self.sprite_size
+    }
+
     pub fn get_anim_view(&self, animation: &Animation, frame_count: usize) -> SubImage<&RgbaImage> {
-       self.get_frame_view(animation.frames[frame_count % animation.frames.len()])
+        self.get_frame_view(animation.frames[frame_count % animation.frames.len()])
     }
 }

@@ -63,8 +63,7 @@ impl OnekoWindow {
             .with_skip_taskbar(true);
 
         #[cfg(target_os = "linux")]
-        let window_attributes = window_attributes
-            .with_x11_window_type(vec![WindowType::Utility]);
+        let window_attributes = window_attributes.with_x11_window_type(vec![WindowType::Utility]);
 
         let window = event_loop.create_window(window_attributes).unwrap();
         window
@@ -80,24 +79,41 @@ impl OnekoWindow {
     }
 
     pub fn update(&mut self) {
-        let cursor_pos = get_cursor_position(&self.window).expect("Error getting cursor position");
-        let mut window_position = self
+        let mut cursor_pos: (i32, i32) = get_cursor_position(&self.window)
+            .expect("Error getting cursor position")
+            .into();
+
+        let mut window_position: (i32, i32) = self
             .window
             .outer_position()
-            .expect("Error getting window position");
-        let window_size = self.window.outer_size();
-        let delta_x = cursor_pos.x - (window_position.x + (window_size.width as i32) / 2);
-        let delta_y = cursor_pos.y - (window_position.y + (window_size.height as i32) / 2);
+            .expect("Error getting window position")
+            .into();
 
-        let (update_delay, (movement_x, movement_y)) = self.oneko.act((delta_x, delta_y), false);
+        let monitor = self
+            .window
+            .current_monitor()
+            .expect("Couldn't get current monitor");
+
+        let monitor_position: (i32, i32) = monitor.position().into();
+        let monitor_size: (i32, i32) = monitor.size().into();
+
+        cursor_pos.0 -= monitor_position.0;
+        cursor_pos.1 -= monitor_position.1;
+        window_position.0 -= monitor_position.0;
+        window_position.1 -= monitor_position.1;
+
+        let (update_delay, mut new_window_position) =
+            self.oneko.act(window_position, cursor_pos, monitor_size);
         self.next_update = Instant::now() + update_delay;
 
         self.window.request_redraw();
 
-        if movement_x != 0 || movement_y != 0 {
-            window_position.x += movement_x;
-            window_position.y += movement_y;
-            self.window.set_outer_position(window_position);
+        new_window_position.0 += monitor_position.0;
+        new_window_position.1 += monitor_position.1;
+
+        if new_window_position != (0, 0) {
+            self.window
+                .set_outer_position(PhysicalPosition::<i32>::from(new_window_position));
         }
     }
 
